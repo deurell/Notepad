@@ -33,18 +33,12 @@ class NotepadView: ARView, ARSessionDelegate, PKCanvasViewDelegate {
         setupARSession()
         
         subscription = scene.subscribe(to: SceneEvents.Update.self, onSceneUpdated)
-        
     }
     
     func onSceneUpdated(_ event: Event) {
-        guard let notepadEntity = self.notepadEntity else {
+        if self.notepadEntity == nil {
             self.notepadEntity = findNotepadEntity(scene: scene)
-            return
         }
-    }
-    
-    func updateNotebookTexture() {
-        
     }
     
     func findNotepadEntity(scene: RealityKit.Scene) -> Entity? {
@@ -53,20 +47,19 @@ class NotepadView: ARView, ARSessionDelegate, PKCanvasViewDelegate {
     }
     
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+        guard let notepadEntity = self.notepadEntity as? HasModel else { return }
+        
         let size = canvasView.frame.size
-        let rect = CGRect(origin: .zero, size: size)
         let image = canvasView.drawing
             .transformed(using: .init(scaleX: -1.0, y: -1.0).translatedBy(x: -CGFloat(size.width), y: -CGFloat(size.height)))
             .image(from: .init(x: 0, y: 0, width: size.width, height: size.height), scale: 1.0)
-  
-        guard let notepadEntity = self.notepadEntity  else { return }
-        
+            .withBackground(color: .white)
+                
         if let cgImage = image.cgImage {
             if let texture = try? TextureResource.generate(from: cgImage, options: .init(semantic: .color)) {
                 var notepadMaterial = PhysicallyBasedMaterial()
-                notepadMaterial.baseColor.texture = SimpleMaterial.Texture(texture)
-                notepadMaterial.roughness = 0.5
-                (notepadEntity as! ModelEntity).model!.materials = [notepadMaterial]
+                notepadMaterial.baseColor.texture = PhysicallyBasedMaterial.Texture(texture)
+                notepadEntity.model?.materials = [notepadMaterial]
             }
         }
     }
@@ -91,8 +84,8 @@ class NotepadView: ARView, ARSessionDelegate, PKCanvasViewDelegate {
         directionalLight.shadow = DirectionalLightComponent.Shadow(
             maximumDistance: 10,
             depthBias: 5.0)
-        directionalLight.position = [1,8,5]
-        directionalLight.look(at: [-2,-2,-4], from: directionalLight.position, relativeTo: nil)
+        directionalLight.position = [0,8,5]
+        directionalLight.look(at: [0,0,0], from: directionalLight.position, relativeTo: directionalLight.parent)
         anchor.addChild(directionalLight)
         
         let planeSize:simd_float3 = [0.5, 0.5, 0.05]
@@ -105,12 +98,12 @@ class NotepadView: ARView, ARSessionDelegate, PKCanvasViewDelegate {
         planeEntity.physicsBody = PhysicsBodyComponent(massProperties: .default, material: .default, mode: .static)
         anchor.addChild(planeEntity)
         
-        let notebookSize:simd_float3 = [0.1, 0.2, 0.001]
+        let notebookSize:simd_float3 = [0.1, 0.2, 0.005]
         let notebookMesh: MeshResource = .generateBox(size: notebookSize)
-        let notebookMaterial = SimpleMaterial(color: .white, roughness: 0.5, isMetallic: false)
+        let notebookMaterial = SimpleMaterial(color: .white, isMetallic: false)
         let notebookEntity = ModelEntity(mesh: notebookMesh, materials: [notebookMaterial])
         notebookEntity.position = [0, 0.2, 0]
-        notebookEntity.transform.rotation = simd_quatf(angle: Float.pi/2, axis: [1,0,0])
+        notebookEntity.transform.rotation = simd_quatf(angle: Float.pi/4, axis: [1,0,0])
         notebookEntity.collision = CollisionComponent(shapes: [.generateBox(size: notebookSize)])
         notebookEntity.physicsMotion = PhysicsMotionComponent()
         notebookEntity.physicsBody = PhysicsBodyComponent(massProperties: .default, material: .default, mode: .dynamic)
@@ -120,3 +113,17 @@ class NotepadView: ARView, ARSessionDelegate, PKCanvasViewDelegate {
 }
 
 struct NotebookComponent: Component {}
+
+extension UIImage {
+    func withBackground(color: UIColor, opaque: Bool = true) -> UIImage {
+      UIGraphicsBeginImageContextWithOptions(size, opaque, scale)
+      guard let ctx = UIGraphicsGetCurrentContext(), let image = cgImage else { return self }
+      defer { UIGraphicsEndImageContext() }
+      let rect = CGRect(origin: .zero, size: size)
+      ctx.setFillColor(color.cgColor)
+      ctx.fill(rect)
+      ctx.concatenate(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: size.height))
+      ctx.draw(image, in: rect)
+      return UIGraphicsGetImageFromCurrentImageContext() ?? self
+    }
+  }
